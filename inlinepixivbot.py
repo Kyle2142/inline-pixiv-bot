@@ -14,6 +14,7 @@ from telethon.tl.types import InputBotInlineResult, InputPhoto, InputMediaPhoto,
 
 from custompyxiv import CustomPyxiv
 
+LOG_FILE = 'logs/bot.log'
 MAX_GROUPED_MEDIA = 10
 RESULTS_PER_QUERY = 30
 
@@ -81,6 +82,16 @@ async def top_images(event: telethon.events.NewMessage.Event):
         logger.exception("Failed to send multimedia")
 
 
+@telethon.events.register(telethon.events.NewMessage(pattern=r"(?i)/logs?"))
+async def send_logs(event: telethon.events.NewMessage.Event):
+    if event.chat_id != config['main'].getint('owner telegram id'):  # cannot use from_users due to config undefined
+        return
+    if os.path.exists(LOG_FILE):
+        await event.reply(file=LOG_FILE)
+    else:
+        await event.reply("No log file found")
+
+
 async def main():
     await pixiv.login(config['pixiv']['username'], config['pixiv']['password'])
     await bot.connect()
@@ -100,7 +111,7 @@ if __name__ == "__main__":
         os.mkdir('logs', 0o770)
     logger = logging.getLogger(__name__)
     logger.setLevel(getattr(logging, config['main']['logging level'], logging.INFO))
-    h = logging.handlers.RotatingFileHandler("logs/bot.log", encoding='utf-8', maxBytes=5 * 1024 * 1024, backupCount=5)
+    h = logging.handlers.RotatingFileHandler(LOG_FILE, encoding='utf-8', maxBytes=5 * 1024 * 1024, backupCount=5)
     logging.basicConfig(format="%(asctime)s\t%(levelname)s:%(message)s", handlers=(h,), level=logging.WARNING)
 
     pixiv = CustomPyxiv()
@@ -111,6 +122,7 @@ if __name__ == "__main__":
     bot.flood_sleep_threshold = 5
     bot.add_event_handler(inline_handler)
     bot.add_event_handler(top_images)
+    bot.add_event_handler(send_logs)
 
     try:
         asyncio.get_event_loop().run_until_complete(main())
