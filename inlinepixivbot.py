@@ -60,8 +60,8 @@ async def top_images(event: telethon.events.NewMessage.Event):
     logger.info("New query: " + match.group(0))
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
-    results = await pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
-                                            ranking='day_r18' if match.group(1) else 'day', )[:MAX_GROUPED_MEDIA]
+    results = (await pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
+                                             ranking='day_r18' if match.group(1) else 'day', ))[:MAX_GROUPED_MEDIA]
     try:
         images = await event.client(
             [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in results]
