@@ -27,10 +27,28 @@ These steps are intended for unix-like systems but are easily translated for oth
 ## Running
 Simply `python3 inlinepixivbot.py`
 
-It is recommended you use a program like `tmux` or `screen`
+You can use a program like `tmux` or `screen` to keep this as a background service.
+Alternatively, here is a sample `systemd` service file:
+```
+[Unit]
+Description=Inline telegram bot for pixiv
+After=network.target
 
+[Service]
+WorkingDirectory=/path/to/inlinepixivbot/folder
+#note that the below assumes you have a venv as per step 3 above
+ExecStart=/path/to/inlinepixivbot/folder/bin/python inlinepixivbot.py
+TimeoutStopSec=10
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+You can install this by
+```bash
+sudo systemctl edit --force -l inlinepixivbot
+sudo systemctl enable inlinepixivbot  # if you want the bot started on reboot
+sudo systemctl start inlinepixivbot
+```
 Logs are stored in `logs/bot.log` and will automatically rotate up to a maximum of 5 5MB files
-
-## License
-
-Feel free to do what you like with this, but please credit me :)
