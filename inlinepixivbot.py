@@ -68,10 +68,10 @@ async def top_images(event: telethon.events.NewMessage.Event):
             [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in results]
         )
     except telethon.errors.MultiError as e:
-        logging.warning("UploadMedia returned one or more errors", exc_info=True)
+        logger.warning("UploadMedia returned one or more errors", exc_info=True)
         images = filter(None, e.results)
         if not images:
-            logging.exception("All UploadMedia requests failed")
+            logger.exception("All UploadMedia requests failed")
             return
 
     images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '') for img in
@@ -109,10 +109,13 @@ if __name__ == "__main__":
 
     if not os.path.exists('logs'):
         os.mkdir('logs', 0o770)
-    logger = logging.getLogger(__name__)
-    logger.setLevel(getattr(logging, config['main']['logging level'], logging.INFO))
+    logger = logging.getLogger()
+    level = getattr(logging, config['main']['logging level'], logging.INFO)
+    logger.setLevel(level)
     h = logging.handlers.RotatingFileHandler(LOG_FILE, encoding='utf-8', maxBytes=5 * 1024 * 1024, backupCount=5)
-    logging.basicConfig(format="%(asctime)s\t%(levelname)s:%(message)s", handlers=(h,), level=logging.WARNING)
+    h.setFormatter(logging.Formatter("%(asctime)s\t%(levelname)s:%(message)s"))
+    h.setLevel(level)
+    logger.addHandler(h)
 
     pixiv = CustomPyxiv()
 
@@ -120,6 +123,7 @@ if __name__ == "__main__":
                                   config['TG API'].getint('api_id'), config['TG API']['api_hash'],
                                   auto_reconnect=True, connection_retries=1000)
     bot.flood_sleep_threshold = 5
+
     bot.add_event_handler(inline_handler)
     bot.add_event_handler(top_images)
     bot.add_event_handler(send_logs)
