@@ -1,9 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import asyncio
 import configparser
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 
 import telethon
@@ -14,6 +15,7 @@ from telethon.tl.types import InputBotInlineResult, InputPhoto, InputMediaPhoto,
 
 from custompyxiv import CustomPyxiv
 
+IN_DOCKER = os.getenv('DOCKER', False)
 LOG_FILE = 'logs/bot.log'
 MAX_GROUPED_MEDIA = 10
 RESULTS_PER_QUERY = 30
@@ -107,16 +109,18 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read_file(open('config.ini'))
 
-    if not os.path.exists('logs'):
-        os.mkdir('logs', 0o770)
     logger = logging.getLogger()
     level = getattr(logging, config['main']['logging level'], logging.INFO)
     logger.setLevel(level)
+    if not os.path.exists('logs'):
+        os.mkdir('logs', 0o770)
     h = logging.handlers.RotatingFileHandler(LOG_FILE, encoding='utf-8', maxBytes=5 * 1024 * 1024, backupCount=5)
     h.setFormatter(logging.Formatter("%(asctime)s\t%(levelname)s:%(message)s"))
     h.setLevel(level)
     logger.addHandler(h)
-
+    if IN_DOCKER:  # we are in docker, use stdout as well
+        logger.addHandler(logging.StreamHandler(sys.stdout))
+    
     pixiv = CustomPyxiv()
 
     bot = telethon.TelegramClient(config['TG API']['session'],

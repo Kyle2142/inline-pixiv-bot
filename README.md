@@ -3,6 +3,20 @@ InlinePixivBot
 A simple Telegram bot which mainly provides inline mode, fetching illustrations from [Pixiv](https://pixiv.net)
 
 You can view my instance of it at [@InlinePixivBot](https://t.me/inlinepixivbot)
+
+## Quick start: Docker install/run
+
+1. download example-config.ini into a memorable location (perhaps `~/.config/inline-pixiv-bot`?) and edit it as per the installation section.
+2. Fire up docker! It will use the config file from the previous step.
+```docker run -d --name inline-pixiv-bot \
+    -v ~/.config/inline-pixiv-bot/config.ini:/usr/src/app/config.ini \
+    -v ~/.config/inline-pixiv-bot/bot.session:/usr/src/app/bot.session \
+    kyle2142/inline-pixiv-bot:latest
+```
+The second `-v` line is optional and is only for re-using a session file (it must exist). 
+Note that if you are running this on a PC/laptop, you will likely need to configure file sharing for the config file. 
+As a docker-only feature, `docker logs inline-pixiv-bot` works. 
+
 ## Requirements
 * Python 3.5 or higher
 
