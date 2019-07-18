@@ -15,27 +15,11 @@ before_install:
   - TRAVIS_REPO_SLUG=$(echo ${TRAVIS_REPO_SLUG} | awk '{print tolower($0)}')
 
 script:
-  - buildctl build --progress plain --frontend dockerfile.v0 \
-        --frontend-opt platform=linux/armhf \
-        --frontend-opt filename=./Dockerfile \
-        --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-armhf \
-        --exporter-opt push=true \
-        --exporter image \
-        --local dockerfile=. \
-        --local context=.
-  - buildctl build --progress plain --frontend dockerfile.v0 \
-        --frontend-opt platform=linux/amd64 \
-        --frontend-opt filename=./Dockerfile \
-        --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-amd64 \
-        --exporter-opt push=true \
-        --exporter image \
-        --local dockerfile=. \
-        --local context=.
+  - buildctl build --progress plain --frontend dockerfile.v0 --frontend-opt platform=linux/armhf --frontend-opt filename=./Dockerfile --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-armhf --exporter-opt push=true --exporter image --local dockerfile=. --local context=.
+  - buildctl build --progress plain --frontend dockerfile.v0 --frontend-opt platform=linux/amd64 --frontend-opt filename=./Dockerfile --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-amd64 --exporter-opt push=true --exporter image --local dockerfile=. --local context=.
 
   - export DOCKER_CLI_EXPERIMENTAL=enabled
-  - docker manifest create ${TRAVIS_REPO_SLUG}:latest \
-            ${TRAVIS_REPO_SLUG}:latest-amd64 \
-            ${TRAVIS_REPO_SLUG}:latest-armhf
+  - docker manifest create ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-armhf
 
   - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-armhf --arch arm
   - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 --arch amd64
