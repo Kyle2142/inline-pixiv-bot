@@ -1,0 +1,43 @@
+dist: xenial
+
+language: bash
+git:
+  depth: 1
+  quiet: true
+
+before_install:
+  - sudo docker run --privileged linuxkit/binfmt:v0.6
+  - sudo docker run -d --privileged -p 1234:1234 --name buildkit moby/buildkit:latest --addr tcp://0.0.0.0:1234 --oci-worker-platform linux/amd64 --oci-worker-platform linux/armhf
+  - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
+  - export BUILDKIT_HOST=tcp://0.0.0.0:1234
+
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - TRAVIS_REPO_SLUG=$(echo ${TRAVIS_REPO_SLUG} | awk '{print tolower($0)}')
+
+script:
+  - buildctl build --progress plain --frontend dockerfile.v0 \
+        --frontend-opt platform=linux/armhf \
+        --frontend-opt filename=./Dockerfile \
+        --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-armhf \
+        --exporter-opt push=true \
+        --exporter image \
+        --local dockerfile=. \
+        --local context=.
+  - buildctl build --progress plain --frontend dockerfile.v0 \
+        --frontend-opt platform=linux/amd64 \
+        --frontend-opt filename=./Dockerfile \
+        --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-amd64 \
+        --exporter-opt push=true \
+        --exporter image \
+        --local dockerfile=. \
+        --local context=.
+
+  - export DOCKER_CLI_EXPERIMENTAL=enabled
+  - docker manifest create ${TRAVIS_REPO_SLUG}:latest \
+            ${TRAVIS_REPO_SLUG}:latest-amd64 \
+            ${TRAVIS_REPO_SLUG}:latest-armhf
+
+  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-armhf --arch arm
+  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 --arch amd64
+
+  - docker manifest push ${TRAVIS_REPO_SLUG}:latest
