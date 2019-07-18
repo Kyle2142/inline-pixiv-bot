@@ -38,6 +38,10 @@ class CustomPyxiv(AppPixivAPI):
         await self.reauth()
         return await super().search_illust(word, search_target, sort, duration, filter, offset, req_auth)
 
+    async def illust_detail(self, illust_id, req_auth=True):
+        await self.reauth()
+        return await super().illust_detail(illust_id, req_auth)
+
     async def reauth(self):
         """Re-authenticates with pixiv if the last login was more than TOKEN_LIFESPAN ago"""
         if datetime.datetime.now() - self.last_auth > self.TOKEN_LIFESPAN:

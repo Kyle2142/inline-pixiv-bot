@@ -21,6 +21,31 @@ MAX_GROUPED_MEDIA = 10
 RESULTS_PER_QUERY = 30
 
 
+@telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
+async def inline_id_handler(event: telethon.events.InlineQuery.Event):
+    illust_id = int(event.pattern_match.group(1))
+    logger.info('Inline query %d: id=%d', event.id, illust_id)
+    pixiv_data = await pixiv.illust_detail(illust_id)
+    if pixiv_data.get('error'):
+        return  # allows other handler to take over
+    illust = pixiv_data['illust']
+    images = illust['image_urls']
+    thumb = InputWebDocument(images['square_medium'], 0, 'image/jpeg', [])
+    content = InputWebDocument(images['large'], 0, 'image/jpeg', [])
+    result = InputBotInlineResult('0', 'photo', InputBotInlineMessageMediaAuto(
+        "Title: {}\nUser: {}".format(illust['title'], illust['user']['name'])), thumb=thumb, content=content)
+    try:
+        await event.client(SetInlineBotResultsRequest(event.id, [result],
+                                                      cache_time=config['TG API'].getint('cache_time')))  # half day
+    except telethon.errors.QueryIdInvalidError:
+        pass
+    except telethon.errors.RPCError:
+        logger.warning("Inline query %d: Sending results failed", event.id, exc_info=True)
+    else:
+        logger.debug("Inline query %d: Complete", event.id)
+    raise telethon.events.StopPropagation()
+
+
 @telethon.events.register(telethon.events.InlineQuery(pattern="(?i)^(R18|NSFW)? ?(.+)?$"))
 async def inline_handler(event: telethon.events.InlineQuery.Event):
     offset = int(event.offset) if event.offset.isdigit() else 0
@@ -120,7 +145,7 @@ if __name__ == "__main__":
     logger.addHandler(h)
     if IN_DOCKER:  # we are in docker, use stdout as well
         logger.addHandler(logging.StreamHandler(sys.stdout))
-    
+
     pixiv = CustomPyxiv()
 
     bot = telethon.TelegramClient(config['TG API']['session'],
@@ -128,6 +153,7 @@ if __name__ == "__main__":
                                   auto_reconnect=True, connection_retries=1000)
     bot.flood_sleep_threshold = 5
 
+    bot.add_event_handler(inline_id_handler)
     bot.add_event_handler(inline_handler)
     bot.add_event_handler(top_images)
     bot.add_event_handler(send_logs)
