@@ -99,7 +99,10 @@ class CustomPyxiv(AppPixivAPI):
             if img['type'] != 'illust' or (not nsfw and img['sanity_level'] != 2):
                 # we do not want manga etc. Sanity level 2 is sfw only
                 continue
-            results.append({'url': img['image_urls']['large'], 'thumb_url': img['image_urls']['square_medium'],
-                            'title': img['title'], 'user': img['user']['name'], 'sanity': img['sanity_level']})
+            large = img['meta_single_page'].get('original_image_url') or img['meta_pages'][0]['image_urls']['original']
+            results.append({
+                'url': large,
+                'thumb_url': img['image_urls']['medium'],
+                'title': img['title'], 'user': img['user']['name'], 'sanity': img['sanity_level']})
             logger.debug(results[-1])
         return results

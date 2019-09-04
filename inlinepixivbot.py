@@ -30,8 +30,11 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
         return  # allows other handler to take over
     illust = pixiv_data['illust']
     images = illust['image_urls']
-    thumb = InputWebDocument(images['square_medium'], 0, 'image/jpeg', [])
-    content = InputWebDocument(images['large'], 0, 'image/jpeg', [])
+    thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
+    content = InputWebDocument(
+        illust['meta_single_page'].get('original_image_url') or illust['meta_pages'][0]['image_urls']['original'],
+        0, 'image/jpeg', []
+    )
     result = InputBotInlineResult('0', 'photo', InputBotInlineMessageMediaAuto(
         "Title: {}\nUser: {}".format(illust['title'], illust['user']['name'])), thumb=thumb, content=content)
     try:
