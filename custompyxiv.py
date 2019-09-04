@@ -1,9 +1,23 @@
 import datetime
 import logging
+from functools import wraps
 
+import aiohttp
 from pyxiv import AppPixivAPI, PixivError
 
 logger = logging.getLogger(__file__)
+
+
+def retry(f):
+    @wraps(f)
+    async def wrapper(*args, **kwargs):
+        for _ in range(1, CustomPyxiv.MAX_RETRIES + 1):
+            try:
+                return await f(*args, **kwargs)
+            except aiohttp.ServerConnectionError:
+                pass
+
+    return wrapper
 
 
 class CustomPyxiv(AppPixivAPI):
@@ -29,15 +43,18 @@ class CustomPyxiv(AppPixivAPI):
         logger.debug('Pyxiv login done')
         return self  # allows chaining
 
+    @retry
     async def illust_ranking(self, mode='day', filter='for_ios', date=None, offset=None, req_auth=True):
         await self.reauth()
         return await super().illust_ranking(mode, filter, date, offset, req_auth)
 
+    @retry
     async def search_illust(self, word, search_target='partial_match_for_tags', sort='date_desc', duration=None,
                             filter='for_ios', offset=None, req_auth=True):
         await self.reauth()
         return await super().search_illust(word, search_target, sort, duration, filter, offset, req_auth)
 
+    @retry
     async def illust_detail(self, illust_id, req_auth=True):
         await self.reauth()
         return await super().illust_detail(illust_id, req_auth)
