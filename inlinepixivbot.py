@@ -30,13 +30,16 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
         return  # allows other handler to take over
     illust = pixiv_data['illust']
     images = illust['image_urls']
-    thumb = InputWebDocument(images['square_medium'], 0, 'image/jpeg', [])
-    content = InputWebDocument(images['large'], 0, 'image/jpeg', [])
+    thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
+    content = InputWebDocument(
+        illust['meta_single_page'].get('original_image_url') or illust['meta_pages'][0]['image_urls']['original'],
+        0, 'image/jpeg', []
+    )
     result = InputBotInlineResult('0', 'photo', InputBotInlineMessageMediaAuto(
         "Title: {}\nUser: {}".format(illust['title'], illust['user']['name'])), thumb=thumb, content=content)
     try:
-        await event.client(SetInlineBotResultsRequest(event.id, [result],
-                                                      cache_time=config['TG API'].getint('cache_time')))  # half day
+        await event.client(SetInlineBotResultsRequest(event.id, [result], gallery=True,
+                                                      cache_time=config['TG API'].getint('cache_time')))
     except telethon.errors.QueryIdInvalidError:
         pass
     except telethon.errors.RPCError:
@@ -71,7 +74,7 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
     logger.debug("Inline query %d: Processed %d results", event.id, len(results))
 
     try:
-        await event.client(SetInlineBotResultsRequest(event.id, results, next_offset=str(next_offset),
+        await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True, next_offset=str(next_offset),
                                                       cache_time=config['TG API'].getint('cache_time')))  # half day
     except telethon.errors.QueryIdInvalidError:
         pass
