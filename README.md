@@ -23,7 +23,7 @@ As a docker-only feature, `docker logs inline-pixiv-bot` works.
 
 The following can be automatically installed using `requirements.txt` (refer to next section)
 * [Telethon](https://github.com/LonamiWebs/Telethon)
-* [Pyxiv](https://github.com/Kyle2142/pyxiv) (an `aiohttp` port of [pixivpy](https://github.com/upbit/pixivpy))
+* [Pixivpy-async](https://github.com/Mikubill/pixivpy-async)
 
 ## Installation
 

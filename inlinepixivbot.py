@@ -122,6 +122,19 @@ async def send_logs(event: telethon.events.NewMessage.Event):
         await event.reply("No log file found")
 
 
+@telethon.events.register(telethon.events.NewMessage(pattern=r"(?i)/(start|help)$"))
+async def start_help(event: telethon.events.NewMessage.Event):
+    await event.reply(
+        "Hello! I am meant to be used in inline mode."
+        "\nIf you are not sure what that means, try typing <code>@inlinepixivbot</code> and a space. "
+        "You will see today's top images from Pixiv.net!\n"
+        "\nIf you want, you can also send <code>/top n</code> (in this chat!), <code>n</code> being an optional offset."
+        "\n\nAnother optional feature is NSFW mode. Simply include \"NSFW\" or \"R18\" at the start: "
+        "<code>@inlinepixivbot nsfw</code>"
+        "\nThis will show you today's top NSFW images from Pixiv.net", parse_mode='HTML'
+    )
+
+
 async def main():
     await pixiv.login(config['pixiv']['username'], config['pixiv']['password'])
     await bot.connect()
@@ -156,10 +169,8 @@ if __name__ == "__main__":
                                   auto_reconnect=True, connection_retries=1000)
     bot.flood_sleep_threshold = 5
 
-    bot.add_event_handler(inline_id_handler)
-    bot.add_event_handler(inline_handler)
-    bot.add_event_handler(top_images)
-    bot.add_event_handler(send_logs)
+    for f in (inline_id_handler, inline_handler, top_images, send_logs, start_help):
+        bot.add_event_handler(f)
 
     try:
         asyncio.get_event_loop().run_until_complete(main())

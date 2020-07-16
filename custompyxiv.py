@@ -3,7 +3,7 @@ import logging
 from functools import wraps
 
 import aiohttp
-from pyxiv import AppPixivAPI, PixivError
+from pixivpy_async import AppPixivAPI, PixivError
 
 logger = logging.getLogger(__file__)
 

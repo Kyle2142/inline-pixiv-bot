@@ -1,2 +1,2 @@
 telethon>=1.5,<2.0
-https://github.com/Kyle2142/pyxiv/archive/master.tar.gz
+pixivpy_async==1.2.10
