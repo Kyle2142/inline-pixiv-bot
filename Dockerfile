@@ -5,7 +5,9 @@ WORKDIR /usr/src/app
 ENV DOCKER 1
 
 COPY requirements.txt ./
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN apk add --no-cache --virtual .build-deps build-base libffi-dev && \
+    pip3 install --no-cache-dir -r requirements.txt && \
+    apk del .build-deps
 
 COPY . .
 
