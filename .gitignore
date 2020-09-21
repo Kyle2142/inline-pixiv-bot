@@ -1,6 +1,6 @@
 .idea
 *.pyc
 venv
-*.session
+*.session*
 config.ini
 logs
