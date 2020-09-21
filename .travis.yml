@@ -13,7 +13,7 @@ addons:
       - docker-ce
 
 stages:
-  - script
+  - test
   - deploy
 
 before_install:
