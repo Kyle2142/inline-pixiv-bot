@@ -42,6 +42,7 @@ jobs:
       script:
         - docker pull ${TRAVIS_REPO_SLUG}:latest-amd64
         - docker pull ${TRAVIS_REPO_SLUG}:latest-arm64
+        - export DOCKER_CLI_EXPERIMENTAL=enabled
         - docker manifest create ${TRAVIS_REPO_SLUG}:${TRAVIS_BRANCH} ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-arm64
         - docker manifest push ${TRAVIS_REPO_SLUG}:${TRAVIS_BRANCH}
         - docker rmi ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-arm64
