@@ -37,8 +37,6 @@ script:
 jobs:
   include:
     - stage: deploy
-      git:
-        clone: false
       script:
         - docker pull ${TRAVIS_REPO_SLUG}:latest-amd64
         - docker pull ${TRAVIS_REPO_SLUG}:latest-arm64
