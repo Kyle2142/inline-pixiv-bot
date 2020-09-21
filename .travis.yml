@@ -7,10 +7,6 @@ git:
   depth: 1
   quiet: true
 
-addons:
-  apt:
-    packages:
-      - docker-ce
 
 stages:
   - test
