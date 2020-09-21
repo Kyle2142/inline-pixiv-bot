@@ -96,7 +96,7 @@ class CustomPixivPy:
                 break
 
         results = []
-        if json_result['has_error']:
+        if json_result.get('has_error'):
             return results
 
         it = json_result.response if query else (x['work'] for x in json_result.response[0]['works'])
