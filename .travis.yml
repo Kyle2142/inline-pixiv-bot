@@ -14,10 +14,13 @@ stages:
   - deploy
 
 before_install:
+  - sudo apt-get remove docker docker-engine docker.io containerd runc || return 0
   - curl -fsSL https://get.docker.com -o get-docker.sh
   - sudo sh get-docker.sh
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - TRAVIS_REPO_SLUG=$(echo ${TRAVIS_REPO_SLUG} | awk '{print tolower($0)}')
+
+# begin build matrix
 
 arch:
   - amd64
@@ -26,6 +29,8 @@ arch:
 script:
   - docker build --tag ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH} .
   - docker push ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH}
+
+# end build matrix, start deploy
 
 jobs:
   include:
