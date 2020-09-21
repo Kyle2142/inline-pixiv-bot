@@ -30,7 +30,7 @@ arch:
 script:
   - if [ "$TRAVIS_ARCH" = "aarch64" ]; then export TRAVIS_ARCH=arm64; fi
   - docker build --tag ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH} .
-  - docker push ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH}
+  - docker push -q ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH}
 
 # end build matrix, start deploy
 
@@ -38,12 +38,10 @@ jobs:
   include:
     - stage: deploy
       script:
-        - docker pull ${TRAVIS_REPO_SLUG}:latest-amd64
-        - docker pull ${TRAVIS_REPO_SLUG}:latest-arm64
+        - docker pull -q ${TRAVIS_REPO_SLUG}:latest-amd64 & docker pull -q ${TRAVIS_REPO_SLUG}:latest-arm64
         - export DOCKER_CLI_EXPERIMENTAL=enabled
         - |
           for x in latest ${TRAVIS_BRANCH}; do
             docker manifest create ${TRAVIS_REPO_SLUG}:${x} ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-arm64
             docker manifest push ${TRAVIS_REPO_SLUG}:${x}
           done
-        - docker rmi ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-arm64
