@@ -30,7 +30,7 @@ arch:
 script:
   - if [ "$TRAVIS_ARCH" = "aarch64" ]; then export TRAVIS_ARCH=arm64; fi
   - docker build --tag ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH} .
-  - docker push -q ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH}
+  - docker push ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH}
 
 # end build matrix, start deploy
 
