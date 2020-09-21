@@ -1,27 +1,46 @@
-dist: xenial
+os: linux
+dist: bionic
 
-language: bash
+language: shell
+
 git:
   depth: 1
   quiet: true
 
-before_install:
-  - sudo docker run --privileged linuxkit/binfmt:v0.6
-  - sudo docker run -d --privileged -p 1234:1234 --name buildkit moby/buildkit:latest --addr tcp://0.0.0.0:1234 --oci-worker-platform linux/amd64 --oci-worker-platform linux/armhf
-  - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
-  - export BUILDKIT_HOST=tcp://0.0.0.0:1234
 
+stages:
+  - test
+  - deploy
+
+before_install:
+  - sudo apt-get remove docker docker-engine docker.io containerd runc || return 0
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sed -i 's/sleep 20/sleep 0/' get-docker.sh  # skip 20s sleep
+  - sudo sh get-docker.sh
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-  - TRAVIS_REPO_SLUG=$(echo ${TRAVIS_REPO_SLUG} | awk '{print tolower($0)}')
+  - export TRAVIS_REPO_SLUG=$(echo ${TRAVIS_REPO_SLUG} | awk '{print tolower($0)}')
+
+# begin build matrix
+
+arch:
+  - amd64
+  - arm64
 
 script:
-  - buildctl build --progress plain --frontend dockerfile.v0 --frontend-opt platform=linux/armhf --frontend-opt filename=./Dockerfile --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-armhf --exporter-opt push=true --exporter image --local dockerfile=. --local context=.
-  - buildctl build --progress plain --frontend dockerfile.v0 --frontend-opt platform=linux/amd64 --frontend-opt filename=./Dockerfile --exporter-opt name=docker.io/${TRAVIS_REPO_SLUG}:latest-amd64 --exporter-opt push=true --exporter image --local dockerfile=. --local context=.
+  - if [ "$TRAVIS_ARCH" = "aarch64" ]; then export TRAVIS_ARCH=arm64; fi
+  - docker build --tag ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH} .
+  - docker push ${TRAVIS_REPO_SLUG}:latest-${TRAVIS_ARCH}
 
-  - export DOCKER_CLI_EXPERIMENTAL=enabled
-  - docker manifest create ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-armhf
+# end build matrix, start deploy
 
-  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-armhf --arch arm
-  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 --arch amd64
-
-  - docker manifest push ${TRAVIS_REPO_SLUG}:latest
+jobs:
+  include:
+    - stage: deploy
+      script:
+        - docker pull -q ${TRAVIS_REPO_SLUG}:latest-amd64 & docker pull -q ${TRAVIS_REPO_SLUG}:latest-arm64
+        - export DOCKER_CLI_EXPERIMENTAL=enabled
+        - |
+          for x in latest ${TRAVIS_BRANCH}; do
+            docker manifest create ${TRAVIS_REPO_SLUG}:${x} ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-arm64
+            docker manifest push ${TRAVIS_REPO_SLUG}:${x}
+          done

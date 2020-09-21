@@ -13,12 +13,11 @@ from telethon.tl.functions.messages import SetInlineBotResultsRequest, SendMulti
 from telethon.tl.types import InputBotInlineResult, InputPhoto, InputMediaPhoto, InputSingleMedia, \
     InputMediaPhotoExternal, SendMessageUploadPhotoAction, InputBotInlineMessageMediaAuto, InputWebDocument
 
-from custompyxiv import CustomPyxiv
+from custompixivpy import CustomPixivPy
 
 IN_DOCKER = os.getenv('DOCKER', False)
 LOG_FILE = 'logs/bot.log'
 MAX_GROUPED_MEDIA = 10
-RESULTS_PER_QUERY = 30
 
 
 @telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
@@ -51,31 +50,34 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
 
 @telethon.events.register(telethon.events.InlineQuery(pattern="(?i)^(R18|NSFW)? ?(.+)?$"))
 async def inline_handler(event: telethon.events.InlineQuery.Event):
+    cache_time = config['TG API'].getint('cache_time')
+
     offset = int(event.offset) if event.offset.isdigit() else 0
-    next_offset = offset + RESULTS_PER_QUERY
+    next_offset = offset + pixiv.RESULTS_PER_QUERY
     if next_offset > pixiv.MAX_PIXIV_RESULTS:
-        await event.answer(cache_time=86000)
+        await event.answer(cache_time=cache_time)
         return
     nsfw = bool(event.pattern_match.group(1))
-    ranking = 'day_r18' if nsfw else 'day'
 
-    logger.info("Inline query %d: text='%s' offset=%s", event.id, event.text, event.offset or '0')
+    logger.info("Inline query %d: text='%s' offset=%s", event.id, event.text, offset)
 
-    pixiv_data = await pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), ranking=ranking, nsfw=nsfw)
+    pixiv_data = await pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
 
     results = []
     for i, img in enumerate(pixiv_data):
         thumb = InputWebDocument(img['thumb_url'], 0, 'image/jpeg', [])
         content = InputWebDocument(img['url'], 0, 'image/jpeg', [])
+        text = f"<a href='{img['url']}'>{img['title']}</a>\nUser: <a href='{img['user_link']}'>{img['user_name']}</a>"
+        # not sure of a better way to get the entities since I can't use event.builder
+        msg = InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
         results.append(
-            InputBotInlineResult(str(i), 'photo', InputBotInlineMessageMediaAuto(
-                "Title: {}\nUser: {}".format(img['title'], img['user'])), thumb=thumb, content=content)
+            InputBotInlineResult(str(i + offset), 'photo', msg, thumb=thumb, content=content, url=img['url'])
         )
     logger.debug("Inline query %d: Processed %d results", event.id, len(results))
 
     try:
         await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True, next_offset=str(next_offset),
-                                                      cache_time=config['TG API'].getint('cache_time')))  # half day
+                                                      cache_time=cache_time))  # half day
     except telethon.errors.QueryIdInvalidError:
         pass
     except telethon.errors.RPCError:
@@ -92,13 +94,14 @@ async def top_images(event: telethon.events.NewMessage.Event):
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
     results = (await pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
-                                             ranking='day_r18' if match.group(1) else 'day', ))[:MAX_GROUPED_MEDIA]
+                                             nsfw=bool(match.group(1))))[:MAX_GROUPED_MEDIA]
     try:
         images = await event.client(
             [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in results]
         )
     except telethon.errors.MultiError as e:
-        logger.warning("UploadMedia returned one or more errors", exc_info=True)
+        logger.warning("UploadMedia returned one or more errors")
+        logging.debug('error: %s', e, exc_info=True)
         images = filter(None, e.results)
         if not images:
             logger.exception("All UploadMedia requests failed")
@@ -162,7 +165,7 @@ if __name__ == "__main__":
     if IN_DOCKER:  # we are in docker, use stdout as well
         logger.addHandler(logging.StreamHandler(sys.stdout))
 
-    pixiv = CustomPyxiv()
+    pixiv = CustomPixivPy()
 
     bot = telethon.TelegramClient(config['TG API']['session'],
                                   config['TG API'].getint('api_id'), config['TG API']['api_hash'],
