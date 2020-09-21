@@ -1,6 +1,6 @@
 dist: xenial
 
-language: bash
+language: shell
 git:
   depth: 1
   quiet: true
@@ -21,7 +21,7 @@ script:
   - export DOCKER_CLI_EXPERIMENTAL=enabled
   - docker manifest create ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-armhf
 
-  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-armhf --arch arm
-  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:latest-amd64 --arch amd64
+  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:${TRAVIS_BRANCH} --arch arm
+  - docker manifest annotate ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:${TRAVIS_BRANCH} --arch amd64
 
-  - docker manifest push ${TRAVIS_REPO_SLUG}:latest
+  - docker manifest push ${TRAVIS_REPO_SLUG}:latest ${TRAVIS_REPO_SLUG}:${TRAVIS_BRANCH}
