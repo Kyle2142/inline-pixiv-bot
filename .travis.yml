@@ -14,6 +14,7 @@ addons:
 
 stages:
   - script
+  - deploy
 
 before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
@@ -29,7 +30,8 @@ script:
 
 jobs:
   include:
-    - script:
+    - stage: deploy
+      script:
         - docker pull ${TRAVIS_REPO_SLUG}:latest-amd64
         - docker pull ${TRAVIS_REPO_SLUG}:latest-arm64
         - docker manifest create ${TRAVIS_REPO_SLUG}:${TRAVIS_BRANCH} ${TRAVIS_REPO_SLUG}:latest-amd64 ${TRAVIS_REPO_SLUG}:latest-arm64
