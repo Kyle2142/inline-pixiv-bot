@@ -17,7 +17,8 @@ jobs:
 
       - name: build and push the image
         run: |
-          export SLUG="${{ secrets.DOCKER_USERNAME }}/inline-pixiv-bot"
+          export REPO=($(echo ${GITHUB_REPOSITORY} | tr '/' ' '))
+          export SLUG="${{ secrets.DOCKER_USERNAME }}/${REPO[1]}"
           docker buildx build \
             --tag ${SLUG}:latest \
             --platform linux/amd64,linux/arm/v7,linux/arm64 .
