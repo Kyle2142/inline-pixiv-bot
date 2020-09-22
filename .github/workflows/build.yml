@@ -1,4 +1,4 @@
-name: build
+name: build and push to dockerhub
 
 on: push
 
@@ -11,21 +11,19 @@ jobs:
       - name: install buildx
         id: buildx
         uses: crazy-max/ghaction-docker-buildx@v1
-        with:
-          version: latest
 
       - name: login to docker hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: build the image
+      - name: build and push the image
         run: |
           export SLUG="${{ secrets.DOCKER_USERNAME }}/inline-pixiv-bot"
           docker buildx build --push \
             --tag ${SLUG}:latest \
             --platform linux/amd64,linux/arm/v7,linux/arm64 .
-          if [ "${GITHUB_REF}" ]; then
-            refs=($(echo ${GITHUB_REF} | tr '/' ' '))
-            export TAG=${refs[3]}
+          if [ ! "${GITHUB_REF}" = "" ]; then
+            export REFS=($(echo ${GITHUB_REF} | tr '/' ' '))
+            export TAG=${REFS[2]}
             docker tag ${SLUG}:latest ${SLUG}:${TAG}
             docker push ${SLUG}:${TAG}
           fi
