@@ -1,0 +1,26 @@
+name: build
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: install buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          version: latest
+      - name: build the image
+      run: |
+        docker buildx build --push \
+          --tag ${GITHUB_REPOSITORY}:latest \
+          --platform linux/amd64,linux/arm/v7,linux/arm64 .
+        if [ "${GITHUB_REF}" ]; then
+          refs=($(echo ${GITHUB_REF} | tr '/' ' '))
+          export TAG=${refs[3]}
+          docker tag ${GITHUB_REPOSITORY}:latest ${GITHUB_REPOSITORY}:${TAG}
+          docker push ${GITHUB_REPOSITORY}:${TAG}
+        fi
