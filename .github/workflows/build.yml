@@ -19,13 +19,9 @@ jobs:
         run: |
           export REPO=($(echo ${GITHUB_REPOSITORY} | tr '/' ' '))
           export SLUG="${{ secrets.DOCKER_USERNAME }}/${REPO[1]}"
-          docker buildx build \
-            --tag ${SLUG}:latest \
+          export REFS=($(echo ${GITHUB_REF} | tr '/' ' '))
+          export TAG=${REFS[2]}
+
+          docker buildx build --push \
+            --tag ${SLUG}:latest --tag ${SLUG}:${TAG} \
             --platform linux/amd64,linux/arm/v7,linux/arm64 .
-          docker push ${SLUG}:latest
-          if [ ! "${GITHUB_REF}" = "" ]; then
-            export REFS=($(echo ${GITHUB_REF} | tr '/' ' '))
-            export TAG=${REFS[2]}
-            docker tag ${SLUG}:latest ${SLUG}:${TAG}
-            docker push ${SLUG}:${TAG}
-          fi
