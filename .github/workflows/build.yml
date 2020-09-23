@@ -1,0 +1,31 @@
+name: build and push to dockerhub
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: install buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+
+      - name: login to docker hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: build and push the image
+        run: |
+          REPO=($(echo ${GITHUB_REPOSITORY} | tr '/' ' '))
+          DOCKER_IMAGE="${{ secrets.DOCKER_USERNAME }}/${REPO[1]}"
+          DOCKER_PLATFORMS=linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/386,linux/ppc64le,linux/s390x
+
+          REFS=($(echo ${GITHUB_REF} | tr '/' ' '))
+          if [[ ${REFS[2]} == master ]]; then
+            TAG="--tag ${DOCKER_IMAGE}:latest"
+          else
+            TAG="--tag ${DOCKER_IMAGE}:${REFS[2]}"
+          fi
+
+          docker buildx build --push ${TAG} --platform ${DOCKER_PLATFORMS} .
