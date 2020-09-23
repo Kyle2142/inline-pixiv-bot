@@ -17,11 +17,15 @@ jobs:
 
       - name: build and push the image
         run: |
-          export REPO=($(echo ${GITHUB_REPOSITORY} | tr '/' ' '))
-          export SLUG="${{ secrets.DOCKER_USERNAME }}/${REPO[1]}"
-          export REFS=($(echo ${GITHUB_REF} | tr '/' ' '))
-          export TAG=${REFS[2]}
+          REPO=($(echo ${GITHUB_REPOSITORY} | tr '/' ' '))
+          DOCKER_IMAGE="${{ secrets.DOCKER_USERNAME }}/${REPO[1]}"
+          DOCKER_PLATFORMS=linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/386,linux/ppc64le,linux/s390x
 
-          docker buildx build --push \
-            --tag ${SLUG}:latest --tag ${SLUG}:${TAG} \
-            --platform linux/amd64,linux/arm/v7,linux/arm64 .
+          REFS=($(echo ${GITHUB_REF} | tr '/' ' '))
+          if [[ ${REFS[2]} == master ]]; then
+            TAG="--tag ${DOCKER_IMAGE}:latest"
+          else
+            TAG="--tag ${DOCKER_IMAGE}:${REFS[2]}"
+          fi
+
+          docker buildx build --push ${TAG} --platform ${DOCKER_PLATFORMS} .
