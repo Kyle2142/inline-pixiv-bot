@@ -36,8 +36,8 @@ class CustomPixivPy:
         self.username = ""
         self.password = ""
 
-        self.aapi = AppPixivAPI(**kwargs)
-        self.papi = PixivAPI(**kwargs)
+        self.aapi = AppPixivAPI(env=True)
+        self.papi = PixivAPI(env=True)
 
     async def login(self, username, password):
         self.password = password
@@ -49,17 +49,34 @@ class CustomPixivPy:
         return self  # allows chaining
 
     @retry
-    async def illust_ranking(self, mode='daily', offset=None):
+    async def illust_ranking(self, mode='day', offset=None):
         await self.reauth()
+        json_result = await self.aapi.illust_ranking(mode=mode)
+        # print(json_result)
         offset = (offset or 0) // self.RESULTS_PER_QUERY + 1
-        return await self.papi.ranking('illust', mode, offset, include_stats=False, image_sizes=['medium', 'large'])
+        print("offset-1", offset-1)
+        for a in range(offset-1):
+            next_qs = self.aapi.parse_qs(json_result.next_url)
+            json_result = await self.aapi.illust_ranking(**next_qs)
+        
+        # notice that not good to use
+        return json_result
 
     @retry
-    async def search_illust(self, word, search_target='text', sort='date', offset=None):
+    async def search_illust(self, word=None, search_target='text', sort='date_desc', offset=None):
         await self.reauth()
         offset = (offset or 0) // self.RESULTS_PER_QUERY + 1
-        return await self.papi.search_works(word, offset, mode=search_target, types=['illustration'],
-                                            sort=sort, include_stats=False, image_sizes=['medium', 'large'])
+        response = await self.aapi.trending_tags_illust()
+        for trend_tag in response.trend_tags[:10]:
+            if not word:
+                word = trend_tag.tag
+                print("%s -  %s(id=%s)" % (trend_tag.tag, trend_tag.illust.title, trend_tag.illust.id))
+            
+            
+        return await self.aapi.search_illust(word, search_target='partial_match_for_tags',sort=sort,offset=offset)
+
+        # return await self.papi.search_works(word, offset, mode=search_target, types=['illustration'],
+        #                                     sort=sort, include_stats=False, image_sizes=['medium', 'large'])
 
     @retry
     async def illust_detail(self, illust_id, req_auth=True):
@@ -87,7 +104,7 @@ class CustomPixivPy:
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
                 json_result = await self.search_illust(query, offset=offset, sort='popular') \
-                    if query else await self.illust_ranking('daily_r18' if nsfw else 'daily', offset=offset)
+                    if query else await self.illust_ranking('day_r18' if nsfw else 'day', offset=offset)
             except PixivError as e:
                 if attempt == self.MAX_RETRIES:
                     logger.warning("Failed fetching Pixiv data: %s", e)
@@ -98,14 +115,24 @@ class CustomPixivPy:
         results = []
         if json_result.get('has_error'):
             return results
-
-        it = json_result.response if query else (x['work'] for x in json_result.response[0]['works'])
-        for img in it:
-            if not nsfw and img['sanity_level'] == 'black':
+        print("get the query : ", query)
+        # it = (x for x in json_result.illusts)
+        for img in json_result.illusts:
+            if not nsfw and img['sanity_level'] > 2:
                 continue  # white = SFW, semi_black = questionable, black = NSFW
             results.append({
                 'url': img['image_urls']['large'],
-                'thumb_url': img['image_urls']['medium'], 'title': img['title'],
-                'user_name': img['user']['name'], 'user_link': f"https://www.pixiv.net/en/users/{img['user']['id']}"})
+                'thumb_url': img['image_urls']['medium'],
+                'title': img['title'],
+                'user_name': img['user']['name'],
+                'user_link': f"https://www.pixiv.net/en/users/{img['user']['id']}"})
+            # print(img['image_urls']['large'])
             logger.debug(results[-1])
+        results.append({
+                'url': 'https://xcx.zhenghaodichan.com:9000/test/9.jpg',
+                'thumb_url': 'https://xcx.zhenghaodichan.com:9000/test/9.jpg',
+                'title': 'https://xcx.zhenghaodichan.com:9000/test/9.jpg',
+                'user_name': 'https://xcx.zhenghaodichan.com:9000/test/9.jpg',
+                'user_link': f"https://www.pixiv.net/en/users/{img['user']['id']}"})
+        print(results)
         return results

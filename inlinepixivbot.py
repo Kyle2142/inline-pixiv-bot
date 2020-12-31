@@ -19,7 +19,7 @@ IN_DOCKER = os.getenv('DOCKER', False)
 LOG_FILE = 'logs/bot.log'
 MAX_GROUPED_MEDIA = 10
 
-
+# according id search
 @telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
 async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     illust_id = int(event.pattern_match.group(1))
@@ -47,7 +47,7 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
         logger.debug("Inline query %d: Complete", event.id)
     raise telethon.events.StopPropagation()
 
-
+# according if nsfw
 @telethon.events.register(telethon.events.InlineQuery(pattern="(?i)^(R18|NSFW)? ?(.+)?$"))
 async def inline_handler(event: telethon.events.InlineQuery.Event):
     cache_time = config['TG API'].getint('cache_time')
@@ -117,6 +117,7 @@ async def top_images(event: telethon.events.NewMessage.Event):
 
 @telethon.events.register(telethon.events.NewMessage(pattern=r"(?i)/logs?"))
 async def send_logs(event: telethon.events.NewMessage.Event):
+    print(LOG_FILE,os.path.exists(LOG_FILE),event.chat_id)
     if event.chat_id != config['main'].getint('owner telegram id'):  # cannot use from_users due to config undefined
         return
     if os.path.exists(LOG_FILE):
@@ -169,7 +170,7 @@ if __name__ == "__main__":
 
     bot = telethon.TelegramClient(config['TG API']['session'],
                                   config['TG API'].getint('api_id'), config['TG API']['api_hash'],
-                                  auto_reconnect=True, connection_retries=1000)
+                                  auto_reconnect=True, connection_retries=1000,proxy=("http", '192.168.0.132', 7890))
     bot.flood_sleep_threshold = 5
 
     for f in (inline_id_handler, inline_handler, top_images, send_logs, start_help):

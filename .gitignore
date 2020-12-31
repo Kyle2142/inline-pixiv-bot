@@ -4,3 +4,6 @@ venv
 *.session*
 config.ini
 logs
+# use to ignore the python environment
+bin
+lib
