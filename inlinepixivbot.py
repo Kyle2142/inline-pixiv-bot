@@ -24,7 +24,7 @@ MAX_GROUPED_MEDIA = 10
 async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     illust_id = int(event.pattern_match.group(1))
     logger.info('Inline query %d: id=%d', event.id, illust_id)
-    pixiv_data = await pixiv.illust_detail(illust_id)
+    pixiv_data = pixiv.illust_detail(illust_id)
     if pixiv_data.get('error'):
         return  # allows other handler to take over
     illust = pixiv_data['illust']
@@ -61,7 +61,7 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
 
     logger.info("Inline query %d: text='%s' offset=%s", event.id, event.text, offset)
 
-    pixiv_data = await pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
+    pixiv_data = pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
 
     results = []
     for i, img in enumerate(pixiv_data):
@@ -93,7 +93,7 @@ async def top_images(event: telethon.events.NewMessage.Event):
     logger.info("New query: " + match.group(0))
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
-    results = (await pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
+    results = (pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
                                              nsfw=bool(match.group(1))))[:MAX_GROUPED_MEDIA]
     try:
         images = await event.client(
@@ -139,7 +139,7 @@ async def start_help(event: telethon.events.NewMessage.Event):
 
 
 async def main():
-    await pixiv.login(config['pixiv']['username'], config['pixiv']['password'])
+    pixiv.login(config['pixiv']['refresh_token'])
     await bot.connect()
     if not await bot.is_user_authorized() or not await bot.is_bot():
         await bot.start(bot_token=config['TG API']['bot_token'])

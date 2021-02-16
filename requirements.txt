@@ -1,2 +1,2 @@
 telethon>=1.5,<2.0
-pixivpy_async==1.2.10
+pixivpy==3.5.10
