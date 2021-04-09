@@ -101,8 +101,8 @@ class CustomPixivPy:
             if not nsfw and img['sanity_level'] == 'black':
                 continue  # white = SFW, semi_black = questionable, black = NSFW
             results.append({
-                'url': img['image_urls']['large'],
+                'id': img['id'], 'url': img['image_urls']['large'],
                 'thumb_url': img['image_urls']['medium'], 'title': img['title'],
-                'user_name': img['user']['name'], 'user_link': f"https://www.pixiv.net/en/users/{img['user']['id']}"})
+                'user_name': img['user']['name'], 'user_id': img['user']['id']})
             logger.debug(results[-1])
         return results

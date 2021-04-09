@@ -18,6 +18,8 @@ from custompixivpy import CustomPixivPy
 IN_DOCKER = os.getenv('DOCKER', False)
 LOG_FILE = 'logs/bot.log'
 MAX_GROUPED_MEDIA = 10
+CAPTION_TEMPLATE = "<a href='https://www.pixiv.net/en/artworks/{}'>{}</a>" \
+                   "\nUser: <a href='https://www.pixiv.net/en/users/{}'>{}</a>"
 
 
 @telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
@@ -34,8 +36,9 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
         illust['meta_single_page'].get('original_image_url') or illust['meta_pages'][0]['image_urls']['original'],
         0, 'image/jpeg', []
     )
+    text = CAPTION_TEMPLATE.format(illust_id, illust['title'], illust['user']['id'], illust['user']['name'])
     result = InputBotInlineResult('0', 'photo', InputBotInlineMessageMediaAuto(
-        "Title: {}\nUser: {}".format(illust['title'], illust['user']['name'])), thumb=thumb, content=content)
+        *await event._client._parse_message_text(text, 'HTML')), thumb=thumb, content=content)
     try:
         await event.client(SetInlineBotResultsRequest(event.id, [result], gallery=True,
                                                       cache_time=config['TG API'].getint('cache_time')))
@@ -67,7 +70,7 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
     for i, img in enumerate(pixiv_data):
         thumb = InputWebDocument(img['thumb_url'], 0, 'image/jpeg', [])
         content = InputWebDocument(img['url'], 0, 'image/jpeg', [])
-        text = f"<a href='{img['url']}'>{img['title']}</a>\nUser: <a href='{img['user_link']}'>{img['user_name']}</a>"
+        text = CAPTION_TEMPLATE.format(img['id'], img['title'], img['user_id'], img['user_name'])
         # not sure of a better way to get the entities since I can't use event.builder
         msg = InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
         results.append(
@@ -77,7 +80,7 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
 
     try:
         await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True, next_offset=str(next_offset),
-                                                      cache_time=cache_time))  # half day
+                                                      cache_time=cache_time))
     except telethon.errors.QueryIdInvalidError:
         pass
     except telethon.errors.RPCError:
@@ -94,7 +97,7 @@ async def top_images(event: telethon.events.NewMessage.Event):
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
     results = (pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
-                                             nsfw=bool(match.group(1))))[:MAX_GROUPED_MEDIA]
+                                       nsfw=bool(match.group(1))))[:MAX_GROUPED_MEDIA]
     try:
         images = await event.client(
             [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in results]
