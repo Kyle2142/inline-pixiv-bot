@@ -64,6 +64,7 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
 
     logger.info("Inline query %d: text='%s' offset=%s", event.id, event.text, offset)
 
+    offset = (offset or 0) // pixiv.RESULTS_PER_QUERY + 1
     pixiv_data = pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
 
     results = []
@@ -96,8 +97,8 @@ async def top_images(event: telethon.events.NewMessage.Event):
     logger.info("New query: " + match.group(0))
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
-    results = (pixiv.get_pixiv_results(int(match.group(2) or 0) * MAX_GROUPED_MEDIA,  # user gives page num
-                                       nsfw=bool(match.group(1))))[:MAX_GROUPED_MEDIA]
+    offset = int(match.group(2) or 1)
+    results = (pixiv.get_pixiv_results(offset, MAX_GROUPED_MEDIA, nsfw=bool(match.group(1))))
     try:
         images = await event.client(
             [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in results]
@@ -105,10 +106,10 @@ async def top_images(event: telethon.events.NewMessage.Event):
     except telethon.errors.MultiError as e:
         logger.warning("UploadMedia returned one or more errors")
         logging.debug('error: %s', e, exc_info=True)
-        images = filter(None, e.results)
-        if not images:
+        if not any(e.results):
             logger.exception("All UploadMedia requests failed")
             return
+        images = filter(None, e.results)
 
     images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '') for img in
               images]
