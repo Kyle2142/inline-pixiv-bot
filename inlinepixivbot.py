@@ -30,17 +30,18 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     if pixiv_data.get('error'):
         return  # allows other handler to take over
     illust = pixiv_data['illust']
-    images = illust['image_urls']
-    thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
-    content = InputWebDocument(
-        illust['meta_single_page'].get('original_image_url') or illust['meta_pages'][0]['image_urls']['original'],
-        0, 'image/jpeg', []
-    )
     text = CAPTION_TEMPLATE.format(illust_id, illust['title'], illust['user']['id'], illust['user']['name'])
-    result = InputBotInlineResult('0', 'photo', InputBotInlineMessageMediaAuto(
-        *await event._client._parse_message_text(text, 'HTML')), thumb=thumb, content=content)
+    text = InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
+
+    results = []
+    for i, page in enumerate(illust['meta_pages']):                                                                                          images = page['image_urls']
+        images = page['image_urls'] 
+        thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
+        content = InputWebDocument(images['original'], 0, 'image/jpeg', [])
+        results.append(InputBotInlineResult(str(i), 'photo', text, thumb=thumb, content=content))
+
     try:
-        await event.client(SetInlineBotResultsRequest(event.id, [result], gallery=True,
+        await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True,
                                                       cache_time=config['TG API'].getint('cache_time')))
     except telethon.errors.QueryIdInvalidError:
         pass
