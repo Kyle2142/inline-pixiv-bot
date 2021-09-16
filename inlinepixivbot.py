@@ -33,8 +33,16 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     text = CAPTION_TEMPLATE.format(illust_id, illust['title'], illust['user']['id'], illust['user']['name'])
     text = InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
 
+    if illust.get('meta_pages'):
+        pages = illust['meta_pages']
+    else:
+        temp = illust['meta_single_page']
+        temp.update(illust['image_urls'])
+        temp.setdefault('original', temp['original_image_url'])
+        pages = ({'image_urls': temp},)
+
     results = []
-    for i, page in enumerate(illust['meta_pages']):
+    for i, page in enumerate(pages):
         images = page['image_urls']
         thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
         content = InputWebDocument(images['original'], 0, 'image/jpeg', [])
