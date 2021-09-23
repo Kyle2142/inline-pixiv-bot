@@ -65,16 +65,16 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
     cache_time = config['TG API'].getint('cache_time')
 
     offset = int(event.offset) if event.offset.isdigit() else 0
-    next_offset = offset + pixiv.RESULTS_PER_QUERY
-    if next_offset > pixiv.MAX_PIXIV_RESULTS:
-        await event.answer(cache_time=cache_time)
-        return
+    # next_offset = offset + pixiv.RESULTS_PER_QUERY
+    # if next_offset > pixiv.MAX_PIXIV_RESULTS:
+    #     await event.answer(cache_time=cache_time)
+    #     return
     nsfw = bool(event.pattern_match.group(1))
 
     logger.info("Inline query %d: text='%s' offset=%s", event.id, event.text, offset)
 
-    offset = (offset or 0) // pixiv.RESULTS_PER_QUERY + 1
-    pixiv_data = pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
+    # offset = offset // pixiv.RESULTS_PER_QUERY + 1
+    pixiv_data, next_offset = pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
 
     results = []
     for i, img in enumerate(pixiv_data):
@@ -87,6 +87,10 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
             InputBotInlineResult(str(i + offset), 'photo', msg, thumb=thumb, content=content, url=img['url'])
         )
     logger.debug("Inline query %d: Processed %d results", event.id, len(results))
+
+    if not results:
+        await event.answer(cache_time=cache_time)
+        return
 
     try:
         await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True, next_offset=str(next_offset),
@@ -106,26 +110,28 @@ async def top_images(event: telethon.events.NewMessage.Event):
     logger.info("New query: " + match.group(0))
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
-    offset = int(match.group(2) or 1)
-    results = (pixiv.get_pixiv_results(offset, MAX_GROUPED_MEDIA, nsfw=bool(match.group(1))))
-    try:
-        images = await event.client(
-            [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in results]
-        )
-    except telethon.errors.MultiError as e:
-        logger.warning("UploadMedia returned one or more errors")
-        logging.debug('error: %s', e, exc_info=True)
-        if not any(e.results):
-            logger.exception("All UploadMedia requests failed")
-            return
-        images = filter(None, e.results)
+    offset = int(match.group(2) or 0)
+    results, _ = (pixiv.get_pixiv_results(offset, nsfw=bool(match.group(1))))
+    n = 10
+    for chunk in (results[i:i + n] for i in range(0, (n - 1) * n, n)):
+        try:
+            images = await event.client(
+                [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in chunk]
+            )
+        except telethon.errors.MultiError as e:
+            logger.warning("UploadMedia returned one or more errors")
+            logging.debug('error: %s', e, exc_info=True)
+            if not any(e.results):
+                logger.exception("All UploadMedia requests failed")
+                return
+            images = filter(None, e.results)
 
-    images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '') for img in
-              images]
-    try:
-        await event.client(SendMultiMediaRequest(event.input_chat, images))
-    except (telethon.errors.UserIsBlockedError, telethon.errors.RPCError):  # TODO: add other relevant errors
-        logger.exception("Failed to send multimedia")
+        images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '') for img in
+                  images]
+        try:
+            await event.client(SendMultiMediaRequest(event.input_chat, images))
+        except (telethon.errors.UserIsBlockedError, telethon.errors.RPCError):  # TODO: add other relevant errors
+            logger.exception("Failed to send multimedia")
 
 
 @telethon.events.register(telethon.events.NewMessage(pattern=r"(?i)/logs?"))

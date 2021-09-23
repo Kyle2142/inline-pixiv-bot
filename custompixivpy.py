@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 from functools import wraps
 
 from pixivpy3 import AppPixivAPI, PixivError, PixivAPI
@@ -46,15 +47,14 @@ class CustomPixivPy:
         return self  # allows chaining
 
     @retry
-    def illust_ranking(self, mode='daily', page=1, per_page=RESULTS_PER_QUERY):
+    def illust_ranking(self, mode='day', offset=0):
         self.reauth()
-        return self.papi.ranking('illust', mode, page, per_page, include_stats=False, image_sizes=['medium', 'large'])
+        return self.aapi.illust_ranking(mode, offset=offset)
 
     @retry
-    def search_illust(self, word, search_target='text', sort='date', offset=None):
+    def search_illust(self, word, search_target='partial_match_for_tags', sort='popular_desc', offset=None):
         self.reauth()
-        return self.papi.search_works(word, offset, mode=search_target, types=['illustration'],
-                                      sort=sort, include_stats=False, image_sizes=['medium', 'large'])
+        return self.aapi.search_illust(word, search_target, sort, offset=offset)
 
     @retry
     def illust_detail(self, illust_id, req_auth=True):
@@ -69,21 +69,20 @@ class CustomPixivPy:
             logger.debug("Reauth successful")
             self.last_auth = datetime.datetime.now()
 
-    def get_pixiv_results(self, page=1, per_page=RESULTS_PER_QUERY, *, query="", nsfw=False):
+    def get_pixiv_results(self, offset=0, *, query="", nsfw=False):
         """
         Get results from Pixiv as a dict
         If no parameters are given, SFW daily ranking is returned
-        :param page: Optional. page offset
-        :param per_page: Optional. how many results per page
+        :param offset: Optional. offset
         :param query: Optional. Specify a search query
         :param nsfw: Whether to allow NSFW illustrations, false by default
         :return: list of dicts containing illustration information
         """
-        json_result, last_error = None, None
+        json_result = None
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
-                json_result = self.search_illust(query, offset=page, sort='popular') \
-                    if query else self.illust_ranking('daily_r18' if nsfw else 'daily', page, per_page)
+                json_result = self.search_illust(query, offset=offset) \
+                    if query else self.illust_ranking('day_r18' if nsfw else 'day', offset)
             except PixivError as e:
                 if attempt == self.MAX_RETRIES:
                     logger.warning("Failed fetching Pixiv data: %s", e)
@@ -95,13 +94,15 @@ class CustomPixivPy:
         if json_result.get('has_error'):
             return results
 
-        it = json_result.response if query else (x['work'] for x in json_result.response[0]['works'])
-        for img in it:
-            if not nsfw and img['sanity_level'] == 'black':
-                continue  # white = SFW, semi_black = questionable, black = NSFW
+        for img in json_result['illusts']:
+            if nsfw ^ img['sanity_level'] == 6:
+                continue  # 6 is NSFW
             results.append({
                 'id': img['id'], 'url': img['image_urls']['large'],
                 'thumb_url': img['image_urls']['medium'], 'title': img['title'],
                 'user_name': img['user']['name'], 'user_id': img['user']['id']})
             logger.debug(results[-1])
-        return results
+
+        next_offset = re.match(r'.+offset=(\d+)', json_result['next_url']) \
+            if json_result['next_url'] else None
+        return results, (int(next_offset.group(1)) if next_offset else None)
