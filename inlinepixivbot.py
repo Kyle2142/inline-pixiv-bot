@@ -8,18 +8,29 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 import telethon
-from telethon.tl.functions.messages import SetInlineBotResultsRequest, SendMultiMediaRequest, SetTypingRequest, \
+from telethon.tl.functions.messages import (
+    SetInlineBotResultsRequest, SendMultiMediaRequest, SetTypingRequest,
     UploadMediaRequest
-from telethon.tl.types import InputBotInlineResult, InputPhoto, InputMediaPhoto, InputSingleMedia, \
-    InputMediaPhotoExternal, SendMessageUploadPhotoAction, InputBotInlineMessageMediaAuto, InputWebDocument
+)
+from telethon.tl.types import (
+    InputBotInlineResult, InputPhoto, InputMediaPhoto, InputSingleMedia,
+    InputMediaPhotoExternal, SendMessageUploadPhotoAction, SendMessageUploadDocumentAction,
+    InputBotInlineMessageMediaAuto, InputWebDocument
+)
 
 from custompixivpy import CustomPixivPy
 
 IN_DOCKER = os.getenv('DOCKER', False)
 LOG_FILE = 'logs/bot.log'
 MAX_GROUPED_MEDIA = 10
-CAPTION_TEMPLATE = "<a href='https://www.pixiv.net/en/artworks/{}'>{}</a>" \
-                   "\nUser: <a href='https://www.pixiv.net/en/users/{}'>{}</a>"
+
+
+async def gen_message(event, illust_id: int, title: str, user_id: int, user_name: str):
+    text = f"<a href='https://www.pixiv.net/en/artworks/{illust_id}'>{title}</a>" \
+           f" (<a href='https://pixiv.cat/{illust_id}.png'>full size</a>)" \
+           f"\nUser: <a href='https://www.pixiv.net/en/users/{user_id}'>{user_name}</a>"
+    # not sure of a better way to get the entities since I can't use event.builder
+    return InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
 
 
 @telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
@@ -29,9 +40,9 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     pixiv_data = pixiv.illust_detail(illust_id)
     if pixiv_data.get('error'):
         return  # allows other handler to take over
+
     illust = pixiv_data['illust']
-    text = CAPTION_TEMPLATE.format(illust_id, illust['title'], illust['user']['id'], illust['user']['name'])
-    text = InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
+    message = await gen_message(event, illust_id, illust['title'], illust['user']['id'], illust['user']['name'])
 
     if illust.get('meta_pages'):
         pages = illust['meta_pages']
@@ -46,7 +57,7 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
         images = page['image_urls']
         thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
         content = InputWebDocument(images['original'], 0, 'image/jpeg', [])
-        results.append(InputBotInlineResult(str(i), 'photo', text, thumb=thumb, content=content))
+        results.append(InputBotInlineResult(str(i), 'photo', message, thumb=thumb, content=content))
 
     try:
         await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True,
@@ -61,7 +72,7 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
 
 
 @telethon.events.register(telethon.events.InlineQuery(pattern="(?i)^(R18|NSFW)? ?(.+)?$"))
-async def inline_handler(event: telethon.events.InlineQuery.Event):
+async def search_handler(event: telethon.events.InlineQuery.Event):
     cache_time = config['TG API'].getint('cache_time')
 
     offset = int(event.offset) if event.offset.isdigit() else 0
@@ -80,11 +91,9 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
     for i, img in enumerate(pixiv_data):
         thumb = InputWebDocument(img['thumb_url'], 0, 'image/jpeg', [])
         content = InputWebDocument(img['url'], 0, 'image/jpeg', [])
-        text = CAPTION_TEMPLATE.format(img['id'], img['title'], img['user_id'], img['user_name'])
-        # not sure of a better way to get the entities since I can't use event.builder
-        msg = InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
+        message = await gen_message(event, img['id'], img['title'], img['user_id'], img['user_name'])
         results.append(
-            InputBotInlineResult(str(i + offset), 'photo', msg, thumb=thumb, content=content, url=img['url'])
+            InputBotInlineResult(str(i + offset), 'photo', message, thumb=thumb, content=content, url=img['url'])
         )
     logger.debug("Inline query %d: Processed %d results", event.id, len(results))
 
@@ -107,7 +116,7 @@ async def inline_handler(event: telethon.events.InlineQuery.Event):
 # pattern: nsfw mode and page num are optional
 async def top_images(event: telethon.events.NewMessage.Event):
     match = event.pattern_match
-    logger.info("New query: " + match.group(0))
+    logger.info("New query: %s", match.group(0))
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
     offset = int(match.group(2) or 0)
@@ -116,7 +125,8 @@ async def top_images(event: telethon.events.NewMessage.Event):
     for chunk in (results[i:i + n] for i in range(0, (n - 1) * n, n)):
         try:
             images = await event.client(
-                [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], 86000)) for result in chunk]
+                [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], ttl_seconds=86000))
+                 for result in chunk]
             )
         except telethon.errors.MultiError as e:
             logger.warning("UploadMedia returned one or more errors")
@@ -139,6 +149,7 @@ async def send_logs(event: telethon.events.NewMessage.Event):
     if event.chat_id != config['main'].getint('owner telegram id'):  # cannot use from_users due to config undefined
         return
     if os.path.exists(LOG_FILE):
+        await event.client(SetTypingRequest(event.input_chat, SendMessageUploadDocumentAction(0)))
         await event.reply(file=LOG_FILE)
     else:
         await event.reply("No log file found")
@@ -191,7 +202,7 @@ if __name__ == "__main__":
                                   auto_reconnect=True, connection_retries=1000)
     bot.flood_sleep_threshold = 5
 
-    for f in (inline_id_handler, inline_handler, top_images, send_logs, start_help):
+    for f in (inline_id_handler, search_handler, top_images, send_logs, start_help):
         bot.add_event_handler(f)
 
     try:
