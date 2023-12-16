@@ -30,7 +30,9 @@ async def gen_message(event, illust_id: int, title: str, user_id: int, user_name
            f" (<a href='https://pixiv.cat/{illust_id}.png'>full size</a>)" \
            f"\nUser: <a href='https://www.pixiv.net/en/users/{user_id}'>{user_name}</a>"
     # not sure of a better way to get the entities since I can't use event.builder
-    return InputBotInlineMessageMediaAuto(*await event._client._parse_message_text(text, 'HTML'))
+    parsed, entities = await event._client._parse_message_text(text, 'HTML')
+    message = InputBotInlineMessageMediaAuto(message=parsed, entities=entities)
+    return message
 
 
 @telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
