@@ -35,9 +35,10 @@ async def gen_message(event, illust_id: int, title: str, user_id: int, user_name
     return message
 
 
-@telethon.events.register(telethon.events.InlineQuery(pattern=r"^(\d+)"))
+# Handle both {id} and https://www.pixiv.net/en/artworks/{id}
+@telethon.events.register(telethon.events.InlineQuery(pattern=r"^(?:.*pixiv.+/)?(\d+)\s*"))
 async def inline_id_handler(event: telethon.events.InlineQuery.Event):
-    illust_id = int(event.pattern_match.group(1))
+    illust_id = int(event.pattern_match.group(1) or event.pattern_match.group(2))
     logger.info('Inline query %d: id=%d', event.id, illust_id)
     pixiv_data = pixiv.illust_detail(illust_id)
     if pixiv_data.get('error'):
@@ -138,8 +139,8 @@ async def top_images(event: telethon.events.NewMessage.Event):
                 return
             images = filter(None, e.results)
 
-        images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '') for img in
-                  images]
+        images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '')
+                  for img in images]
         try:
             await event.client(SendMultiMediaRequest(event.input_chat, images))
         except (telethon.errors.UserIsBlockedError, telethon.errors.RPCError):  # TODO: add other relevant errors
