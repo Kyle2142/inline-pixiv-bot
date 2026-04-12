@@ -15,7 +15,7 @@ from telethon.tl.functions.messages import (
 from telethon.tl.types import (
     InputBotInlineResult, InputPhoto, InputMediaPhoto, InputSingleMedia,
     InputMediaPhotoExternal, SendMessageUploadPhotoAction, SendMessageUploadDocumentAction,
-    InputBotInlineMessageMediaAuto, InputWebDocument
+    InputBotInlineMessageMediaAuto, InputWebDocument, DocumentAttributeImageSize
 )
 
 from custompixivpy import CustomPixivPy
@@ -40,7 +40,7 @@ async def gen_message(event, illust_id: int, title: str, user_id: int, user_name
 async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     illust_id = int(event.pattern_match.group(1) or event.pattern_match.group(2))
     logger.info('Inline query %d: id=%d', event.id, illust_id)
-    pixiv_data = pixiv.illust_detail(illust_id)
+    pixiv_data = await asyncio.to_thread(pixiv.illust_detail, illust_id)
     if pixiv_data.get('error'):
         return  # allows other handler to take over
 
@@ -58,8 +58,9 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
     results = []
     for i, page in enumerate(pages):
         images = page['image_urls']
-        thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', [])
-        content = InputWebDocument(images['original'], 0, 'image/jpeg', [])
+        attrs = [] if not (illust.get('width') and illust.get('height')) else [DocumentAttributeImageSize(w=illust['width'], h=illust['height'])]
+        thumb = InputWebDocument(images['medium'], 0, 'image/jpeg', attrs)
+        content = InputWebDocument(images['original'], 0, 'image/jpeg', attrs)
         results.append(InputBotInlineResult(str(i), 'photo', message, thumb=thumb, content=content))
 
     try:
@@ -78,7 +79,10 @@ async def inline_id_handler(event: telethon.events.InlineQuery.Event):
 async def search_handler(event: telethon.events.InlineQuery.Event):
     cache_time = config['TG API'].getint('cache_time')
 
-    offset = int(event.offset) if event.offset.isdigit() else 0
+    try:
+        offset = int(event.offset) if event.offset else 0
+    except (ValueError, TypeError):
+        offset = 0
     # next_offset = offset + pixiv.RESULTS_PER_QUERY
     # if next_offset > pixiv.MAX_PIXIV_RESULTS:
     #     await event.answer(cache_time=cache_time)
@@ -88,12 +92,13 @@ async def search_handler(event: telethon.events.InlineQuery.Event):
     logger.info("Inline query %d: text='%s' offset=%s", event.id, event.text, offset)
 
     # offset = offset // pixiv.RESULTS_PER_QUERY + 1
-    pixiv_data, next_offset = pixiv.get_pixiv_results(offset, query=event.pattern_match.group(2), nsfw=nsfw)
+    pixiv_data, next_offset = await asyncio.to_thread(pixiv.get_pixiv_results, offset, query=(event.pattern_match.group(2) or ""), nsfw=nsfw)
 
     results = []
     for i, img in enumerate(pixiv_data):
-        thumb = InputWebDocument(img['thumb_url'], 0, 'image/jpeg', [])
-        content = InputWebDocument(img['url'], 0, 'image/jpeg', [])
+        attrs = [] if not (img.get('w') and img.get('h')) else [DocumentAttributeImageSize(w=img['w'], h=img['h'])]
+        thumb = InputWebDocument(img['thumb_url'], 0, 'image/jpeg', attrs)
+        content = InputWebDocument(img['url'], 0, 'image/jpeg', attrs)
         message = await gen_message(event, img['id'], img['title'], img['user_id'], img['user_name'])
         results.append(
             InputBotInlineResult(str(i + offset), 'photo', message, thumb=thumb, content=content, url=img['url'])
@@ -105,7 +110,8 @@ async def search_handler(event: telethon.events.InlineQuery.Event):
         return
 
     try:
-        await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True, next_offset=str(next_offset),
+        next_offset_str = str(next_offset) if next_offset is not None else ''
+        await event.client(SetInlineBotResultsRequest(event.id, results, gallery=True, next_offset=next_offset_str,
                                                       cache_time=cache_time))
     except telethon.errors.QueryIdInvalidError:
         pass
@@ -122,10 +128,12 @@ async def top_images(event: telethon.events.NewMessage.Event):
     logger.info("New query: %s", match.group(0))
 
     await event.client(SetTypingRequest(event.input_chat, SendMessageUploadPhotoAction(0)))
-    offset = int(match.group(2) or 0)
-    results, _ = (pixiv.get_pixiv_results(offset, nsfw=bool(match.group(1))))
+    # Treat the optional numeric argument as a page number (0-based). Convert to absolute server offset.
+    page = int(match.group(2) or 0)
+    server_offset = page * pixiv.RESULTS_PER_QUERY
+    results, _ = await asyncio.to_thread(pixiv.get_pixiv_results, server_offset, nsfw=bool(match.group(1)))
     n = 10
-    for chunk in (results[i:i + n] for i in range(0, (n - 1) * n, n)):
+    for chunk in (results[i:i + n] for i in range(0, len(results), n)):
         try:
             images = await event.client(
                 [UploadMediaRequest(event.input_chat, InputMediaPhotoExternal(result['url'], ttl_seconds=86000))
@@ -134,15 +142,31 @@ async def top_images(event: telethon.events.NewMessage.Event):
         except telethon.errors.MultiError as e:
             logger.warning("UploadMedia returned one or more errors")
             logging.debug('error: %s', e, exc_info=True)
-            if not any(e.results):
+            # e.results may contain exceptions or None for failed uploads; collect successful uploads
+            success_results = []
+            for r in getattr(e, 'results', []) or []:
+                if getattr(r, 'photo', None):
+                    success_results.append(r)
+            if not success_results:
                 logger.exception("All UploadMedia requests failed")
                 return
-            images = filter(None, e.results)
+            images = success_results
+        except Exception as e:
+            logger.exception("Unexpected error during UploadMediaRequest")
+            return
 
-        images = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '')
-                  for img in images]
+        # Ensure images is a concrete list
+        if not isinstance(images, list):
+            images = list(images)
+
+        media_to_send = [InputSingleMedia(InputMediaPhoto(InputPhoto(img.photo.id, img.photo.access_hash, b'')), '')
+                         for img in images]
+        if not media_to_send:
+            logger.warning("No media to send after upload; skipping chunk")
+            continue
+
         try:
-            await event.client(SendMultiMediaRequest(event.input_chat, images))
+            await event.client(SendMultiMediaRequest(event.input_chat, media_to_send))
         except (telethon.errors.UserIsBlockedError, telethon.errors.RPCError):  # TODO: add other relevant errors
             logger.exception("Failed to send multimedia")
 
@@ -184,19 +208,29 @@ if __name__ == "__main__":
     if not os.path.exists('config.ini'):
         raise FileNotFoundError('config.ini not found. Please copy example-config.ini and edit the relevant values')
     config = configparser.ConfigParser()
-    config.read_file(open('config.ini'))
+    with open('config.ini', 'r', encoding='utf-8') as cf:
+        config.read_file(cf)
 
     logger = logging.getLogger()
     level = getattr(logging, config['main']['logging level'], logging.INFO)
     logger.setLevel(level)
     if not os.path.exists('logs'):
         os.mkdir('logs', 0o770)
+    # nicer, machine-parseable timestamp, include logger name and source line
+    formatter = logging.Formatter("%(asctime)s %(levelname)s [%(name)s:%(lineno)d] %(message)s", "%Y-%m-%d %H:%M:%S")
     h = logging.handlers.RotatingFileHandler(LOG_FILE, encoding='utf-8', maxBytes=5 * 1024 * 1024, backupCount=5)
-    h.setFormatter(logging.Formatter("%(asctime)s\t%(levelname)s:%(message)s"))
+    h.setFormatter(formatter)
     h.setLevel(level)
     logger.addHandler(h)
+    # stdout handler (useful in docker); apply same formatter
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(formatter)
+    sh.setLevel(level)
     if IN_DOCKER:  # we are in docker, use stdout as well
-        logger.addHandler(logging.StreamHandler(sys.stdout))
+        logger.addHandler(sh)
+
+    # Force Telethon to INFO to suppress noisy DEBUG logs regardless of configured level
+    logging.getLogger('telethon').setLevel(logging.INFO)
 
     pixiv = CustomPixivPy()
 
@@ -209,6 +243,6 @@ if __name__ == "__main__":
         bot.add_event_handler(f)
 
     try:
-        asyncio.get_event_loop().run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
