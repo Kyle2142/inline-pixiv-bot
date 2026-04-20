@@ -20,8 +20,8 @@ As a docker-only feature, `docker logs inline-pixiv-bot` works.
 
 ## Requirements
 
-* Python >=3.14, although lower likely works. (e.g. `uv python pin 3.12`?)
-* [uv](https://astral.sh/uv)
+* [uv](https://docs.astral.sh/uv/)
+  * This will find/install an appropriate python as needed
 
 ## Installation
 
@@ -46,6 +46,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/path/to/inlinepixivbot/folder
+# .venv can be created with `uv sync`
 ExecStart=.venv/bin/python inlinepixivbot.py
 TimeoutStopSec=10
 Restart=always
