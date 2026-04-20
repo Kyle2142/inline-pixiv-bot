@@ -3,7 +3,7 @@ name = "inline-pixiv-bot"
 version = "1.0.0"
 description = "An inline bot for serving images from pixiv.net"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "pixivpy3>=3.7.5",
     "telethon>=1.5,<2.0",

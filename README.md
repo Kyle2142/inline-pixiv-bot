@@ -21,7 +21,7 @@ As a docker-only feature, `docker logs inline-pixiv-bot` works.
 ## Requirements
 
 * [uv](https://docs.astral.sh/uv/)
-  * This will find/install an appropriate python as needed
+  * This will find/create an appropriate python env as needed
 
 ## Installation
 
