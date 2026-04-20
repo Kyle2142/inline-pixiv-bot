@@ -6,6 +6,16 @@ import threading
 import time
 from collections import OrderedDict
 
+
+try:
+    from pixivpy3 import AppPixivAPI, PixivError, PixivAPI
+except Exception:
+    from pixivpy3 import AppPixivAPI, PixivError
+    PixivAPI = None
+
+logger = logging.getLogger(__name__)
+
+
 class SimpleTTLCache:
     def __init__(self, maxsize=50, ttl=600):
         self.maxsize = maxsize
@@ -36,14 +46,6 @@ class SimpleTTLCache:
 
     def clear(self):
         self.data.clear()
-
-try:
-    from pixivpy3 import AppPixivAPI, PixivError, PixivAPI
-except Exception:
-    from pixivpy3 import AppPixivAPI, PixivError
-    PixivAPI = None
-
-logger = logging.getLogger(__name__)
 
 
 def retry(f):
@@ -273,13 +275,6 @@ class CustomPixivPy:
 
         return items, exhausted, (server_offset if not exhausted else None)
 
-    def _expire_global_seen(self, key=None):
-        """Expire old entries in the global seen maps.
-        If key is None, expire entries for all keys; otherwise expire only for the given key.
-        """
-        # No-op in flattened mode; retained for compatibility
-        return
-
     def get_pixiv_results(self, offset=0, *, query="", nsfw=False):
         """Return client-logical paginated results using a flattened in-memory cache."""
         # Normalize query to empty string when falsy so we treat None and '' the same
@@ -335,14 +330,14 @@ class CustomPixivPy:
                                 self.flattened_cache[fkey] = {'items': new_items, 'ts': time.time(), 'exhausted': exhausted, 'next_server_offset': next_server_offset}
                                 items = new_items
                             logger.debug("Flattened cache now has %d items (exhausted=%s) next_server_offset=%s", len(items), exhausted, next_server_offset)
-                        except Exception:
-                            logger.exception("Failed to build flattened pixiv results")
+                        except Exception as e:
+                            logger.exception("Failed to build flattened pixiv results (swallowing): %s", e)
             finally:
                 try:
                     if lock is not None and acquired:
                         lock.release()
                 except Exception as e:
-                    logger.debug("Failed releasing build lock for key=%s: %s", fkey, e, exc_info=True)
+                    logger.warning("Failed releasing build lock for key=%s: %s", fkey, e, exc_info=True)
 
         slice_items = items[int(offset):int(offset) + int(self.RESULTS_PER_QUERY)]
         if not slice_items:
